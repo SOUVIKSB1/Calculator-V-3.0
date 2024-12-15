@@ -1,0 +1,93 @@
+.calculator {
+    width: 300px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #f0f0f0; /* Light grey background */
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+}
+
+input{
+    width: 93%; /* Full width */
+    height: 50px; /* Adjusted for better proportions */
+    margin-bottom: 10px;
+    align-items: center;
+    padding: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: right;
+    border: 1px solid #ccc; /* Match calculator border style */
+    border-radius: 5px;
+    background-color: #fff; /* White background for display */
+    color: #000; /* Black text for readability */
+    font-weight: bolder;
+}
+
+.buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4 columns */
+    gap: 10px; /* Consistent spacing between buttons */
+}
+
+button {
+    margin: 5px;
+    height: 50px; /* Proportional size */
+    font-size: 18px;
+    font-weight: bold;
+    border: none; /* Clean look */
+    border-radius: 10px; /* Rounded buttons */
+    background-color: #b8d8fa; /* Light blue */
+    color: #000; /* Black text */
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease; /* Smooth hover and active effects */
+}
+
+button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+    color: #fff; /* White text for contrast */
+}
+
+
+button:active {
+    transform: scale(0.95); /* Slightly shrink on click */
+    background-color: #003d7a; /* Even darker blue when active */
+}
+
+.equals{
+    background:orange
+}
+
+.equals:hover {
+    background-color: #f12aff; /* Darker blue on hover */
+    color: #fff; /* White text for contrast */
+}
+
+.equals:active {
+    transform: scale(0.95); /* Slightly shrink on click */
+    background-color: #0efe1e;
+    color: black;
+    cursor: progress;
+    
+}
+
+.btn:hover {
+    background-color: #f12aff; /* Darker blue on hover */
+    color: #fff; /* White text for contrast */
+}
+
+.btn:active {
+    transform: scale(0.95); /* Slightly shrink on click */
+    background-color: #de0f0f;
+    color: white;
+    
+}
+
+input:hover{
+    background-color: rgb(255, 175, 247);
+    
+}
+.name{
+    font-size: 25px;
+    
+}
