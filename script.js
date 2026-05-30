@@ -1,4 +1,7 @@
-
+/* =========================================
+   CALC V3.0  |  script.js
+   © Souvik — All rights reserved
+========================================= */
 
 'use strict';
 
@@ -901,12 +904,6 @@ async function askAI() {
   const prompt = document.getElementById('aiPrompt').value.trim();
   if (!prompt) return;
 
-  if (!GEMINI_API_KEY) {
-    document.getElementById('aiResponse').textContent =
-      '⚠ No API key set.\n\nGet a free key in 30 seconds:\n1. Go to aistudio.google.com/apikey\n2. Click "Create API key"\n3. Paste it into GEMINI_API_KEY in script.js';
-    return;
-  }
-
   const btn   = document.getElementById('aiSendBtn');
   const label = document.getElementById('aiSendLabel');
   const resp  = document.getElementById('aiResponse');
@@ -918,100 +915,99 @@ async function askAI() {
     <div class="ai-dot"></div>
   </div>`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{
-      text: `You are a brilliant math assistant inside a calculator app.
+  /*
+   * Strategy:
+   *  1. On Vercel → call /api/solve (serverless proxy, key stays server-side)
+   *  2. On localhost with config.js key → call Gemini directly (dev convenience)
+   *  3. Neither → show setup instructions
+   */
+  const isVercel   = location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+  const hasLocalKey = typeof CONFIG !== 'undefined' && !!CONFIG.GEMINI_API_KEY;
+
+  if (!isVercel && !hasLocalKey) {
+    resp.textContent =
+      '⚠ No API key found.\n\n' +
+      'Locally: paste your key in config.js\n' +
+      'On Vercel: add GEMINI_API_KEY in\n' +
+      'Dashboard → Settings → Environment Variables';
+    btn.disabled      = false;
+    label.textContent = 'Solve ✦';
+    return;
+  }
+
+  try {
+    let text = '';
+
+    if (isVercel) {
+      /* ── Vercel: hit our own serverless proxy ── */
+      label.textContent = 'Solving…';
+      const res = await fetch('/api/solve', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ prompt }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.error || `HTTP ${res.status}`);
+      }
+      text = data.text || 'No response returned.';
+
+    } else {
+      /* ── Local dev: call Gemini directly using config.js key ── */
+      const localKey = CONFIG.GEMINI_API_KEY;
+      let lastErr    = '';
+
+      for (let mi = 0; mi < GEMINI_MODELS.length; mi++) {
+        const model = GEMINI_MODELS[mi];
+        label.textContent = mi === 0 ? 'Solving…' : `Trying ${model}…`;
+
+        const res = await fetch(geminiEndpoint(model).replace(GEMINI_API_KEY, localKey), {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `You are a brilliant math assistant inside a calculator app.
 Solve any math problem clearly. Show step-by-step working when useful.
 Use plain text only — no markdown, no asterisks, no hashes.
 Keep answers concise. For simple arithmetic: answer + one-line explanation.
 For complex problems: numbered steps, final answer clearly labelled.
 
-Problem: ${prompt}`,
-    }]}],
-    generationConfig: { maxOutputTokens: 1000, temperature: 0.2 },
-  });
+Problem: ${prompt}` }] }],
+            generationConfig: { maxOutputTokens: 1000, temperature: 0.2 },
+          }),
+        });
 
-  let lastErrorMsg = '';
-
-  for (let mi = 0; mi < GEMINI_MODELS.length; mi++) {
-    const model = GEMINI_MODELS[mi];
-    label.textContent = mi === 0 ? 'Solving…' : `Trying ${model}…`;
-
-    try {
-      const res = await fetch(geminiEndpoint(model), {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
-
-      /* ── Rate limited on this model ── */
-      if (res.status === 429) {
-        const errBody     = await res.json().catch(() => ({}));
-        const retryAfter  = parseRetryAfter(errBody);
-        const isLastModel = mi === GEMINI_MODELS.length - 1;
-
-        if (!isLastModel) {
-          // Silently fall through to the next cheaper model
+        if (res.status === 429 || res.status === 404) {
+          const isLast = mi === GEMINI_MODELS.length - 1;
+          lastErr = friendlyError(res.status, await res.json().catch(() => ({})));
+          if (isLast) { throw new Error(lastErr); }
           continue;
         }
 
-        // Last model + rate limited → wait the suggested time, then retry once
-        if (retryAfter && retryAfter <= 30) {
-          await showCountdown(retryAfter, model);
-          label.textContent = 'Retrying…';
-
-          const retry = await fetch(geminiEndpoint(model), {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
-          });
-
-          if (retry.ok) {
-            const data = await retry.json();
-            const text = data.candidates?.[0]?.content?.parts
-              ?.map(p => p.text || '').join('\n').trim() || 'No response returned.';
-            resp.textContent = text;
-            sounds.eq();
-            return;
-          }
+        if (!res.ok) {
+          throw new Error(friendlyError(res.status, await res.json().catch(() => ({}))));
         }
 
-        // Still failing — give up and show helpful message
-        lastErrorMsg = friendlyError(429, errBody);
+        const data = await res.json();
+        text = data.candidates?.[0]?.content?.parts
+          ?.map(p => p.text || '').join('\n').trim() || 'No response returned.';
         break;
       }
-
-      /* ── Other HTTP errors ── */
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        // Auth errors & bad requests are user errors — no point trying other models
-        if (res.status === 400 || res.status === 401 || res.status === 403) {
-          lastErrorMsg = friendlyError(res.status, errBody);
-          break;
-        }
-        // 404 (model not found) or 5xx → try next model in cascade
-        lastErrorMsg = friendlyError(res.status, errBody);
-        continue;
-      }
-
-      /* ── Success ── */
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts
-        ?.map(p => p.text || '').join('\n').trim() || 'No response returned.';
-      resp.textContent = text;
-      sounds.eq();
-      return;
-
-    } catch (networkErr) {
-      // True network failure (offline, DNS, etc.)
-      lastErrorMsg = `⚠ Network error: ${networkErr.message}\n\nCheck your internet connection.`;
-      break;
     }
-  }
 
-  /* ── All models failed ── */
-  resp.textContent = lastErrorMsg || '⚠ Could not reach the AI. Please try again.';
-  sounds.error();
-  btn.disabled      = false;
-  label.textContent = 'Solve ✦';
+    resp.textContent = text;
+    sounds.eq();
+
+  } catch (err) {
+    resp.textContent = err.message?.startsWith('⚠')
+      ? err.message
+      : `⚠ ${err.message || 'Could not connect to AI.'}`;
+    sounds.error();
+  } finally {
+    btn.disabled      = false;
+    label.textContent = 'Solve ✦';
+  }
 }
 
 function fillPrompt(txt) {
