@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="aurora">
+<head>
+  <meta charset="UTF-8" />
+
+  <!--
+    ─── VIEWPORT ───────────────────────────────────────────────────
+    viewport-fit=cover: lets content render into notch / home-bar
+    area on iOS. Pair with env(safe-area-inset-*) in CSS.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- SEO -->
+  <title>CALC V3.0 — Glass Calculator</title>
+  <meta name="description" content="A beautiful glass-morphism calculator with scientific mode, currency & unit converters, and an AI math solver. Multi-theme, mobile-first." />
+
+  <!--
+    ─── PWA / HOME SCREEN ──────────────────────────────────────────
+    Lets users add the page to their home screen as an app-like icon
+    on iOS and Android without a full Service Worker manifest.
+  -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="CALC 3.0" />
+  <!-- black-translucent extends app into status bar on iOS -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!--
+    ─── THEME COLOR ────────────────────────────────────────────────
+    Colors the browser chrome (address bar, tab strip) on Android
+    Chrome and some iOS browsers.  Updated by JS when theme changes.
+  -->
+  <meta name="theme-color" id="metaThemeColor" content="#0a0e1a" />
+
+  <!--
+    ─── OPEN GRAPH (share previews) ────────────────────────────────
+  -->
+  <meta property="og:title"       content="CALC V3.0 — Glass Calculator" />
+  <meta property="og:description" content="Beautiful glass-morphism calculator with AI math solver." />
+  <meta property="og:type"        content="website" />
+
+  <!--
+    ─── FONTS ──────────────────────────────────────────────────────
+    NOTE: "SF Pro Display" is NOT available on Google Fonts — it is
+    an Apple proprietary typeface. Removed to prevent a 404 request.
+    Figtree + DM Mono provide identical design intent.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="sheet.css" />
+</head>
+
+<body>
+
+  <!-- ── Particle canvas (aria-hidden: purely decorative) ── -->
+  <canvas id="particles" aria-hidden="true"></canvas>
+
+  <!--
+    ─── THEME DOCK ─────────────────────────────────────────────────
+    role="radiogroup": semantically a set of mutually-exclusive
+    theme choices, each pill acts as a radio button.
+  -->
+  <div
+    class="theme-dock"
+    id="themeDock"
+    role="radiogroup"
+    aria-label="Color theme"
+  >
+    <button type="button" class="theme-pill active" data-theme="aurora"   role="radio" aria-checked="true"  aria-label="Aurora theme">🌌</button>
+    <button type="button" class="theme-pill"        data-theme="sakura"   role="radio" aria-checked="false" aria-label="Sakura theme">🌸</button>
+    <button type="button" class="theme-pill"        data-theme="ocean"    role="radio" aria-checked="false" aria-label="Ocean theme">🌊</button>
+    <button type="button" class="theme-pill"        data-theme="sunset"   role="radio" aria-checked="false" aria-label="Sunset theme">🌅</button>
+    <button type="button" class="theme-pill"        data-theme="midnight" role="radio" aria-checked="false" aria-label="Midnight theme">🌙</button>
+    <button type="button" class="theme-pill"        data-theme="forest"   role="radio" aria-checked="false" aria-label="Forest theme">🌿</button>
+  </div>
+
+  <!-- ── Main application ── -->
+  <main class="app-wrap" id="appWrap">
+
+    <header class="app-header">
+      <div class="logo" aria-label="CALC version 3.0">
+        <span class="logo-icon" aria-hidden="true">◈</span>
+        <span class="logo-text">CALC <em>3.0</em></span>
+      </div>
+
+      <div class="header-actions" role="group" aria-label="App controls">
+        <button
+          type="button"
+          class="icon-btn"
+          id="voiceBtn"
+          aria-label="Voice input"
+          aria-pressed="false"
+          title="Voice Input"
+        >🎙</button>
+        <button
+          type="button"
+          class="icon-btn"
+          id="soundBtn"
+          aria-label="Sound on"
+          aria-pressed="true"
+          title="Sound On/Off"
+        >🔊</button>
+      </div>
+    </header>
+
+    <!--
+      ─── TAB BAR ──────────────────────────────────────────────────
+      Proper ARIA tab pattern: role="tablist" + role="tab" +
+      aria-selected + aria-controls pointing to role="tabpanel".
+    -->
+    <nav class="tab-bar" role="tablist" aria-label="Calculator modes">
+      <button type="button" class="tab active" role="tab" id="tab-btn-calc"     aria-selected="true"  aria-controls="tab-calc"     tabindex="0">Calculator</button>
+      <button type="button" class="tab"        role="tab" id="tab-btn-sci"      aria-selected="false" aria-controls="tab-sci"      tabindex="-1">Scientific</button>
+      <button type="button" class="tab"        role="tab" id="tab-btn-currency" aria-selected="false" aria-controls="tab-currency" tabindex="-1">Currency</button>
+      <button type="button" class="tab"        role="tab" id="tab-btn-unit"     aria-selected="false" aria-controls="tab-unit"     tabindex="-1">Units</button>
+      <button type="button" class="tab"        role="tab" id="tab-btn-ai"       aria-selected="false" aria-controls="tab-ai"       tabindex="-1">AI Solver</button>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════
+         CALCULATOR TAB
+    ═══════════════════════════════════════════════ -->
+    <section
+      class="tab-panel active"
+      id="tab-calc"
+      role="tabpanel"
+      aria-labelledby="tab-btn-calc"
+    >
+
+      <!--
+        aria-live="polite": screen readers announce changes after the
+        user finishes their current interaction.
+        aria-atomic="true": read the whole display as one unit.
+      -->
+      <div class="glass-display" aria-label="Calculator display">
+        <div class="display-top">
+          <span class="mem-indicator" id="memIndicator"   aria-live="polite" aria-label="Memory status"></span>
+          <span class="voice-indicator" id="voiceIndicator" aria-live="polite"></span>
+        </div>
+        <output
+          class="expr-line"
+          id="exprLine"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="Current expression"
+        >0</output>
+        <output
+          class="preview-line"
+          id="previewLine"
+          aria-live="polite"
+          aria-label="Live preview"
+        ></output>
+      </div>
+
+      <!-- Memory row -->
+      <div class="mem-row" role="group" aria-label="Memory controls">
+        <button type="button" class="mem-btn" aria-label="Memory clear"  id="btnMC">MC</button>
+        <button type="button" class="mem-btn" aria-label="Memory recall" id="btnMR">MR</button>
+        <button type="button" class="mem-btn" aria-label="Memory add"    id="btnMPlus">M+</button>
+        <button type="button" class="mem-btn" aria-label="Memory subtract" id="btnMMinus">M−</button>
+        <button type="button" class="mem-btn" aria-label="Toggle history" aria-expanded="false" id="histBtn">🕐</button>
+      </div>
+
+      <!-- History drawer -->
+      <div class="hist-drawer" id="histDrawer" aria-hidden="true">
+        <div class="hist-header">
+          <span>History</span>
+          <button type="button" id="clearHistBtn">Clear all</button>
+        </div>
+        <ul id="histList" aria-label="Calculation history"></ul>
+      </div>
+
+      <!-- Standard keypad -->
+      <div class="keypad" id="mainKeypad" role="group" aria-label="Calculator keypad">
+
+        <div class="key-row">
+          <button type="button" class="key k-fn" id="btnAC" aria-label="All clear">AC</button>
+          <button type="button" class="key k-fn" id="btnDel" aria-label="Delete last character">⌫</button>
+          <button type="button" class="key k-fn" id="btnPct" aria-label="Percent">%</button>
+          <button type="button" class="key k-op" id="btnDiv" aria-label="Divide">÷</button>
+        </div>
+
+        <div class="key-row">
+          <button type="button" class="key" aria-label="7">7</button>
+          <button type="button" class="key" aria-label="8">8</button>
+          <button type="button" class="key" aria-label="9">9</button>
+          <button type="button" class="key k-op" id="btnMul" aria-label="Multiply">×</button>
+        </div>
+
+        <div class="key-row">
+          <button type="button" class="key" aria-label="4">4</button>
+          <button type="button" class="key" aria-label="5">5</button>
+          <button type="button" class="key" aria-label="6">6</button>
+          <button type="button" class="key k-op" id="btnSub" aria-label="Subtract">−</button>
+        </div>
+
+        <div class="key-row">
+          <button type="button" class="key" aria-label="1">1</button>
+          <button type="button" class="key" aria-label="2">2</button>
+          <button type="button" class="key" aria-label="3">3</button>
+          <button type="button" class="key k-op" id="btnAdd" aria-label="Add">+</button>
+        </div>
+
+        <div class="key-row">
+          <button type="button" class="key k-wide" aria-label="0">0</button>
+          <button type="button" class="key" aria-label="Decimal point">.</button>
+          <button type="button" class="key k-eq" id="btnEq" aria-label="Equals">=</button>
+        </div>
+
+      </div>
+
+    </section><!-- /tab-calc -->
+
+    <!-- ═══════════════════════════════════════════════
+         SCIENTIFIC TAB
+    ═══════════════════════════════════════════════ -->
+    <section
+      class="tab-panel"
+      id="tab-sci"
+      role="tabpanel"
+      aria-labelledby="tab-btn-sci"
+      hidden
+    >
+
+      <div class="glass-display" aria-label="Scientific calculator display">
+        <div class="display-top">
+          <span class="mem-indicator" id="sciMemIndicator" aria-live="polite"></span>
+        </div>
+        <output
+          class="expr-line"
+          id="sciExprLine"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="Scientific expression"
+        >0</output>
+        <output
+          class="preview-line"
+          id="sciPreviewLine"
+          aria-live="polite"
+          aria-label="Scientific preview"
+        ></output>
+      </div>
+
+      <div class="sci-grid" role="group" aria-label="Scientific functions">
+
+        <!-- Trig -->
+        <button type="button" class="key k-sci" data-sci="Math.sin(" aria-label="Sine">sin</button>
+        <button type="button" class="key k-sci" data-sci="Math.cos(" aria-label="Cosine">cos</button>
+        <button type="button" class="key k-sci" data-sci="Math.tan(" aria-label="Tangent">tan</button>
+        <button type="button" class="key k-sci" data-sci="Math.asin(" aria-label="Arc sine">sin⁻¹</button>
+        <button type="button" class="key k-sci" data-sci="Math.acos(" aria-label="Arc cosine">cos⁻¹</button>
+
+        <!-- Logarithms & roots -->
+        <button type="button" class="key k-sci" data-sci="Math.log10(" aria-label="Log base 10">log</button>
+        <button type="button" class="key k-sci" data-sci="Math.log("   aria-label="Natural log">ln</button>
+        <button type="button" class="key k-sci" data-sci="Math.sqrt("  aria-label="Square root">√</button>
+        <button type="button" class="key k-sci" data-sci="Math.cbrt("  aria-label="Cube root">∛</button>
+        <button type="button" class="key k-sci" data-sci="**2"         aria-label="Squared">x²</button>
+
+        <!-- Powers & constants -->
+        <button type="button" class="key k-sci" data-sci="**3"      aria-label="Cubed">x³</button>
+        <button type="button" class="key k-sci" data-sci="**"       aria-label="Power">xⁿ</button>
+        <button type="button" class="key k-sci" data-sci="Math.PI"  aria-label="Pi">π</button>
+        <button type="button" class="key k-sci" data-sci="Math.E"   aria-label="Euler's number">e</button>
+        <button type="button" class="key k-sci" data-sci="("        aria-label="Open parenthesis">( )</button>
+
+        <!-- Basic ops -->
+        <button type="button" class="key k-fn"  id="sciBtnAC"  aria-label="All clear">AC</button>
+        <button type="button" class="key k-fn"  id="sciBtnDel" aria-label="Delete">⌫</button>
+        <button type="button" class="key k-fn"  data-sci="%"   aria-label="Percent">%</button>
+        <button type="button" class="key k-op"  data-sci="/"   aria-label="Divide">÷</button>
+        <button type="button" class="key k-op"  data-sci="*"   aria-label="Multiply">×</button>
+
+        <button type="button" class="key" aria-label="7">7</button>
+        <button type="button" class="key" aria-label="8">8</button>
+        <button type="button" class="key" aria-label="9">9</button>
+        <button type="button" class="key k-op" data-sci="-" aria-label="Subtract">−</button>
+        <button type="button" class="key k-op" data-sci="+" aria-label="Add">+</button>
+
+        <button type="button" class="key" aria-label="4">4</button>
+        <button type="button" class="key" aria-label="5">5</button>
+        <button type="button" class="key" aria-label="6">6</button>
+        <button type="button" class="key" aria-label="1">1</button>
+        <button type="button" class="key" aria-label="2">2</button>
+
+        <button type="button" class="key" aria-label="3">3</button>
+        <button type="button" class="key" aria-label="0">0</button>
+        <button type="button" class="key" aria-label="Decimal point">.</button>
+        <button type="button" class="key" data-sci="(" aria-label="Open parenthesis">(</button>
+        <button type="button" class="key k-eq" id="sciBtnEq" aria-label="Equals">=</button>
+
+      </div>
+
+    </section><!-- /tab-sci -->
+
+    <!-- ═══════════════════════════════════════════════
+         CURRENCY TAB
+    ═══════════════════════════════════════════════ -->
+    <section
+      class="tab-panel"
+      id="tab-currency"
+      role="tabpanel"
+      aria-labelledby="tab-btn-currency"
+      hidden
+    >
+      <div class="converter-wrap">
+        <h2 class="conv-title">Currency Converter</h2>
+        <p class="conv-sub" id="currencySubtitle">Live rates via exchangerate-api</p>
+
+        <div class="conv-amount-row">
+          <div class="conv-field">
+            <label for="currAmount">Amount</label>
+            <!--
+              inputmode="decimal": shows a numeric keyboard with
+              decimal point on mobile. No autofill popups on number fields.
+            -->
+            <input
+              type="number"
+              id="currAmount"
+              value="1"
+              min="0"
+              step="any"
+              inputmode="decimal"
+              autocomplete="off"
+              aria-describedby="currencySubtitle"
+            />
+          </div>
+        </div>
+
+        <div class="conv-pair">
+          <div class="conv-select-wrap">
+            <label for="currFrom">From</label>
+            <select id="currFrom" aria-label="From currency"></select>
+          </div>
+          <button type="button" class="swap-btn" id="swapCurrBtn" aria-label="Swap currencies">⇄</button>
+          <div class="conv-select-wrap">
+            <label for="currTo">To</label>
+            <select id="currTo" aria-label="To currency"></select>
+          </div>
+        </div>
+
+        <div
+          class="conv-result glass-result"
+          id="currResult"
+          aria-live="polite"
+          aria-label="Conversion result"
+        >
+          <span class="result-big">—</span>
+          <span class="result-rate" id="currRate"></span>
+        </div>
+
+        <button type="button" class="conv-go-btn" id="refreshRatesBtn">🔄 Refresh Rates</button>
+        <p class="conv-note" id="currNote" aria-live="polite">Tap Refresh to load live rates</p>
+      </div>
+    </section><!-- /tab-currency -->
+
+    <!-- ═══════════════════════════════════════════════
+         UNIT TAB
+    ═══════════════════════════════════════════════ -->
+    <section
+      class="tab-panel"
+      id="tab-unit"
+      role="tabpanel"
+      aria-labelledby="tab-btn-unit"
+      hidden
+    >
+      <div class="converter-wrap">
+        <h2 class="conv-title">Unit Converter</h2>
+
+        <!-- Category selector -->
+        <div
+          class="unit-category-row"
+          id="unitCatRow"
+          role="radiogroup"
+          aria-label="Unit category"
+        >
+          <button type="button" class="unit-cat active" data-cat="length"  role="radio" aria-checked="true"  aria-label="Length units">📏 Length</button>
+          <button type="button" class="unit-cat"        data-cat="weight"  role="radio" aria-checked="false" aria-label="Weight units">⚖️ Weight</button>
+          <button type="button" class="unit-cat"        data-cat="temp"    role="radio" aria-checked="false" aria-label="Temperature units">🌡️ Temp</button>
+          <button type="button" class="unit-cat"        data-cat="area"    role="radio" aria-checked="false" aria-label="Area units">⬛ Area</button>
+          <button type="button" class="unit-cat"        data-cat="speed"   role="radio" aria-checked="false" aria-label="Speed units">💨 Speed</button>
+          <button type="button" class="unit-cat"        data-cat="data"    role="radio" aria-checked="false" aria-label="Data units">💾 Data</button>
+        </div>
+
+        <div class="conv-amount-row">
+          <div class="conv-field">
+            <label for="unitAmount">Value</label>
+            <input
+              type="number"
+              id="unitAmount"
+              value="1"
+              step="any"
+              inputmode="decimal"
+              autocomplete="off"
+              aria-label="Value to convert"
+            />
+          </div>
+        </div>
+
+        <div class="conv-pair">
+          <div class="conv-select-wrap">
+            <label for="unitFrom">From</label>
+            <select id="unitFrom" aria-label="From unit"></select>
+          </div>
+          <button type="button" class="swap-btn" id="swapUnitBtn" aria-label="Swap units">⇄</button>
+          <div class="conv-select-wrap">
+            <label for="unitTo">To</label>
+            <select id="unitTo" aria-label="To unit"></select>
+          </div>
+        </div>
+
+        <div
+          class="conv-result glass-result"
+          id="unitResult"
+          aria-live="polite"
+          aria-label="Unit conversion result"
+        >
+          <span class="result-big">—</span>
+        </div>
+      </div>
+    </section><!-- /tab-unit -->
+
+    <!-- ═══════════════════════════════════════════════
+         AI SOLVER TAB
+    ═══════════════════════════════════════════════ -->
+    <section
+      class="tab-panel"
+      id="tab-ai"
+      role="tabpanel"
+      aria-labelledby="tab-btn-ai"
+      hidden
+    >
+      <div class="ai-wrap">
+
+        <div class="ai-header">
+          <span class="ai-badge" aria-hidden="true">✦ AI</span>
+          <h2>Math Solver</h2>
+          <p id="aiSubDesc">Type any math problem in plain English</p>
+        </div>
+
+        <div class="ai-input-row">
+          <label for="aiPrompt" class="visually-hidden">Math problem</label>
+          <textarea
+            id="aiPrompt"
+            rows="3"
+            placeholder="e.g. What is 15% of 340? or Solve x² + 5x + 6 = 0"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="send"
+            aria-describedby="aiSubDesc"
+          ></textarea>
+          <button
+            type="button"
+            class="ai-send-btn"
+            id="aiSendBtn"
+            aria-label="Solve math problem"
+            aria-describedby="aiSubDesc"
+          >
+            <span id="aiSendLabel">Solve ✦</span>
+          </button>
+        </div>
+
+        <div
+          class="ai-response glass-result"
+          id="aiResponse"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="AI solution"
+        >
+          <div class="ai-placeholder">
+            <span aria-hidden="true">✦</span>
+            <p>Ask me any math question!</p>
+          </div>
+        </div>
+
+        <!-- Quick prompts -->
+        <div class="ai-chips" role="group" aria-label="Quick prompts">
+          <button type="button" class="ai-chip" data-prompt="What is 18% tip on $85?">18% tip on $85</button>
+          <button type="button" class="ai-chip" data-prompt="Compound interest: $1000 at 5% for 10 years">Compound Interest</button>
+          <button type="button" class="ai-chip" data-prompt="Solve: 2x + 5 = 13">Solve 2x+5=13</button>
+          <button type="button" class="ai-chip" data-prompt="Area of a circle with radius 7cm">Circle area r=7</button>
+          <button type="button" class="ai-chip" data-prompt="Convert 72°F to Celsius">°F to °C</button>
+        </div>
+
+      </div>
+    </section><!-- /tab-ai -->
+
+  </main><!-- /app-wrap -->
+
+  <footer class="app-footer">
+    <span>&lt; Souvik ./ &gt;</span>
+    <span>© All rights reserved <time datetime="2024">2024</time></span>
+  </footer>
+
+  <!--
+    ─── VISUALLY HIDDEN UTILITY ──────────────────────────────────
+    Hides content visually while keeping it in the accessibility tree.
+    Used for screen-reader-only labels (e.g. textarea label above).
+  -->
+  <style>
+    .visually-hidden {
+      position: absolute;
+      clip-path: inset(50%);
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      white-space: nowrap;
+    }
+  </style>
+  
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
