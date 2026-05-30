@@ -5,6 +5,13 @@
 
 'use strict';
 
+/* ══════════════════════════════════════
+   API KEY
+   Loaded from config.js (gitignored).
+   config.js is loaded before this script
+   in index.html and sets window.CONFIG.
+   See config.example.js for the template.
+══════════════════════════════════════ */
 const GEMINI_API_KEY = (typeof CONFIG !== 'undefined' && CONFIG.GEMINI_API_KEY)
   ? CONFIG.GEMINI_API_KEY
   : '';
@@ -946,6 +953,22 @@ async function askAI() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ prompt }),
       });
+
+      /* ── Safe JSON parse: if Vercel returns an HTML error page,
+            .json() would throw a confusing "Unexpected token" error.
+            Check Content-Type first and give a clear message. ── */
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const raw = await res.text();
+        if (res.status === 404) {
+          throw new Error(
+            '⚠ /api/solve not found (404).\n\n' +
+            'Make sure api/solve.js is committed and Vercel has redeployed.\n' +
+            'Check: Vercel Dashboard → Deployments → Functions tab.'
+          );
+        }
+        throw new Error(`⚠ Server returned non-JSON (${res.status}): ${raw.slice(0, 120)}`);
+      }
 
       const data = await res.json();
 

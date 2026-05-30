@@ -1,10 +1,7 @@
 /* =========================================
    api/solve.js  —  Vercel Serverless Function
-   Proxies requests to Gemini so the API key
-   stays server-side only (process.env).
-
-   Set  GEMINI_API_KEY  in:
-   Vercel Dashboard → Project → Settings → Environment Variables
+   Uses CommonJS (module.exports) — required
+   for plain .js files on Vercel Node runtime.
 ========================================= */
 
 const MODELS = [
@@ -19,14 +16,18 @@ Use plain text only — no markdown, no asterisks, no hashes.
 Keep answers concise. For simple arithmetic: answer + one-line explanation.
 For complex problems: numbered steps, final answer clearly labelled.`;
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
 
-  /* ── Only allow POST ── */
+  /* ── CORS headers (allows browser to call this endpoint) ── */
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  /* ── Key must be set in Vercel env vars ── */
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return res.status(500).json({
@@ -39,57 +40,46 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing or invalid prompt.' });
   }
 
-  const body = JSON.stringify({
+  const geminiBody = JSON.stringify({
     contents: [{ parts: [{ text: `${SYSTEM}\n\nProblem: ${prompt}` }] }],
     generationConfig: { maxOutputTokens: 1000, temperature: 0.2 },
   });
 
-  /* ── Model cascade — same logic as the browser version ── */
-  let lastStatus = 500;
+  let lastStatus  = 500;
   let lastErrBody = {};
 
   for (const model of MODELS) {
-    const endpoint =
+    const url =
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
     let geminiRes;
     try {
-      geminiRes = await fetch(endpoint, {
+      geminiRes = await fetch(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body,
+        body:    geminiBody,
       });
     } catch (netErr) {
-      return res.status(502).json({ error: `Network error reaching Gemini: ${netErr.message}` });
+      return res.status(502).json({ error: `Network error: ${netErr.message}` });
     }
 
-    if (geminiRes.status === 429) {
-      // rate-limited → try next model silently
-      lastStatus  = 429;
+    if (geminiRes.status === 429 || geminiRes.status === 404) {
+      lastStatus  = geminiRes.status;
       lastErrBody = await geminiRes.json().catch(() => ({}));
-      continue;
-    }
-
-    if (geminiRes.status === 404) {
-      // model not found → try next model
-      lastStatus  = 404;
-      lastErrBody = await geminiRes.json().catch(() => ({}));
-      continue;
+      continue; // try next model
     }
 
     if (!geminiRes.ok) {
-      lastErrBody = await geminiRes.json().catch(() => ({}));
-      return res.status(geminiRes.status).json(lastErrBody);
+      const body = await geminiRes.json().catch(() => ({}));
+      return res.status(geminiRes.status).json(body);
     }
 
-    /* ── Success — extract text and return just the answer ── */
     const data = await geminiRes.json();
-    const text  = data.candidates?.[0]?.content?.parts
+    const text = data.candidates?.[0]?.content?.parts
       ?.map(p => p.text || '').join('\n').trim() || 'No response returned.';
 
     return res.status(200).json({ text });
   }
 
-  /* ── All models exhausted ── */
   return res.status(lastStatus).json(lastErrBody);
-}
+};
